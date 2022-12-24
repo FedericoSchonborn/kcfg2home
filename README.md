@@ -1,3 +1,3 @@
-# kcfg2nix
+# kcfg2home
 
-Generate NixOS/Home Manager modules from KDE Frameworks configuration files.
+Generate Home Manager modules from KDE Frameworks configuration files.

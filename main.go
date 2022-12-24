@@ -1,11 +1,17 @@
 package main
 
 import (
-	"encoding/json"
+	_ "embed"
 	"encoding/xml"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
+	"text/template"
 )
+
+//go:embed module.nix.template
+var moduleTemplate string
 
 type Schema struct {
 	Includes []string  `xml:"include,omitempty" json:"includes,omitempty"`
@@ -24,7 +30,7 @@ type Signal struct {
 }
 
 type Argument struct {
-	Name string `xml:",innerxml" xml:",innerxml"`
+	Name string `xml:",innerxml" json:"name,omitempty"`
 	Type string `xml:"type,attr,omitempty" json:"type,omitempty"`
 }
 
@@ -35,12 +41,62 @@ type Group struct {
 
 type Entry struct {
 	Name    string    `xml:"name,attr,omitempty" json:"name,omitempty"`
-	Key string  `xml:"key,attr,omitempty" json:"key,omitempty"`
-	Type    string    `xml:"type,attr,omitempty" json:"type,omitempty"`
+	Key     string    `xml:"key,attr,omitempty" json:"key,omitempty"`
+	Type    Type      `xml:"type,attr,omitempty" json:"type,omitempty"`
 	Choices []*Choice `xml:"choices>choice,omitempty" json:"choices,omitempty"`
 	Label   string    `xml:"label,omitempty" json:"label,omitempty"`
 	Default *Default  `xml:"default,omitempty" json:"default,omitempty"`
 	Emit    *Emit     `xml:"emit,omitempty" json:"emit,omitempty"`
+}
+
+func (e *Entry) ActualKey() string {
+	if e.Key != "" {
+		return e.Key
+	}
+
+	return e.Name
+}
+
+func (e *Entry) DefaultValue() (interface{}, error) {
+	if e.Default == nil {
+		return nil, nil
+	}
+
+	if e.Default.Code {
+		Printfln("Note: default values with `code` flag set are not supported (%s)", e.Name)
+		return nil, nil
+	}
+
+	switch t := e.Type; t {
+	case TypeBool:
+		return strconv.ParseBool(e.Default.Value)
+	case TypeDouble:
+		return strconv.ParseFloat(e.Default.Value, 64)
+	case TypeInt:
+		return strconv.ParseInt(e.Default.Value, 10, 64)
+	case TypeEnum:
+		if len(e.Choices) != 0 {
+			return e.Choices[0].Name, nil
+		}
+
+		return e.Default.Value, nil
+	default:
+		return nil, fmt.Errorf("unsupported type: %s", t)
+	}
+}
+
+type Type string
+
+const (
+	TypeBool   = "bool"
+	TypeInt    = "int"
+	TypeDouble = "double"
+	TypeEnum   = "enum"
+)
+
+func (t *Type) UnmarshalText(text []byte) error {
+	*t = Type(strings.ToLower(string(text)))
+	return nil
 }
 
 type Choice struct {
@@ -58,7 +114,7 @@ type Emit struct {
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintf(os.Stderr, "kcfg2nix: %v\n", err)
+		fmt.Fprintf(os.Stderr, "kcfg2home: %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -74,11 +130,40 @@ func run() error {
 		return err
 	}
 
-	json, err := json.MarshalIndent(schema, "", "  ")
+	for _, group := range schema.Groups {
+		for _, entry := range group.Entries {
+			defaultValue, err := entry.DefaultValue()
+			if err != nil {
+				return err
+			}
+
+			Printfln("%s: %s", entry.ActualKey(), entry.Label)
+			Printfln("  Type: %s", entry.Type)
+			if len(entry.Choices) > 0 {
+				fmt.Println("  Choices:")
+				for _, choice := range entry.Choices {
+					Printfln("    %s", choice.Name)
+				}
+			}
+
+			if entry.Default != nil {
+				Printfln("  Default: %v", defaultValue)
+			}
+		}
+	}
+
+	tmpl, err := template.New("kcfg2home").Parse(moduleTemplate)
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("%s", json)
+	if err := tmpl.Execute(os.Stdout, schema); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+func Printfln(format string, a ...any) (n int, err error) {
+	return fmt.Printf(format+"\n", a...)
 }

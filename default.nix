@@ -1,6 +1,6 @@
 {lib, buildGoModule, ...}:
 buildGoModule {
-  pname = "kcfg2nix";
+  pname = "kcfg2home";
   version = "unstable";
 
   src = ./.;
