@@ -1,5 +1,5 @@
 {
-  description = "Generate NixOS/Home Manager modules from KDE Frameworks configuration files";
+  description = "Generate Home Manager modules from KDE configuration files";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
 

@@ -1,0 +1,50 @@
+{ lib, config, ... }:
+with lib;
+let
+cfg = config.kde.{{ .Name }};
+in {
+    options.kde.{{ .Name }} = {
+        enable = mkEnableOption "Whether {{ .Name }} should be managed by Home Manager";
+
+    settings = {
+    {{ range $groups := .Groups }}
+        {{ .Name }} = {
+            {{ range $entry := $groups.Entries }}
+                {{ if $entry.Skip }}
+                    {{ continue }}
+                {{ end }}
+
+                {{ $entry.ActualKey }} = {
+                    description = {{ printf "%q" $entry.Label }};
+                    {{ if eq .Type "enum" }}
+                        type = with types; nullOr enum [
+                            {{ range $choice := $entry.Choices }}
+                                {{ printf "%q" $choice.Name }}
+                            {{ end }}
+                        ];
+                        default = {{ printf "%q" $entry.DefaultValue }};
+                    {{ else }}
+                        type = with types; nullOr {{ $entry.Type.ToNix }};
+                        {{ with $defaultValue := $entry.DefaultValue }}
+                            {{ if eq $entry.Type "string" }}
+                                default = {{ printf "%q" $defaultValue }};
+                            {{ else }}
+                                default = {{ $defaultValue }};
+                            {{ end }}
+                        {{ else }}
+                            default = null;
+                        {{ end }}
+                    {{ end }}
+                };
+            {{ end }}
+        };
+    {{ end }}
+    };
+
+        {{/* TODO: Define configuration options. */}}
+    };
+
+    config = mkIf cfg.enable {
+        {{/* TODO: Apply configuration options. */}}
+    };
+}
